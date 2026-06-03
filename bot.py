@@ -80,7 +80,31 @@ class OKXDynamicGridBot:
         # Print the self-contained internal ledger report metrics
         print(f" -> INTERNAL LEDGER: ${self.bot_cash:.2f} Free Cash | {self.bot_doge:.2f} Available DOGE Tokens")
 
-        # CHECK BUY ORDER FILL STATUS
+        # --- DYNAMIC CHASING CLEANUP ENGINE ---
+        # If the market center moved, cancel stale orders so they can be replaced at the new targets
+        if self.current_buy_order:
+            try:
+                order = self.exchange.fetch_order(self.current_buy_order, self.symbol)
+                if order['status'] == 'open' and float(order['price']) != target_buy_price:
+                    print(f"🔄 Moving average shifted. Canceling old Buy at ${order['price']} to adjust to new target ${target_buy_price}")
+                    self.cancel_safe(self.current_buy_order)
+                    self.current_buy_order = None
+                    self.bot_cash += self.capital_per_grid  # Credit the cash back to replace it
+            except Exception as e:
+                print(f"Error updating/checking buy grid drift: {e}")
+
+        if self.current_sell_order:
+            try:
+                order = self.exchange.fetch_order(self.current_sell_order, self.symbol)
+                if order['status'] == 'open' and float(order['price']) != target_sell_price:
+                    print(f"🔄 Moving average shifted. Canceling old Sell at ${order['price']} to adjust to new target ${target_sell_price}")
+                    self.cancel_safe(self.current_sell_order)
+                    self.current_sell_order = None
+            except Exception as e:
+                print(f"Error updating/checking sell grid drift: {e}")
+        # -------------------------------------
+
+        # CHECK BUY ORDER FILL STATUS (If still active)
         if self.current_buy_order:
             try:
                 order = self.exchange.fetch_order(self.current_buy_order, self.symbol)
@@ -94,7 +118,7 @@ class OKXDynamicGridBot:
                 print(f"Error checking buy status: {e}")
                 if "50119" in str(e): return
 
-        # CHECK SELL ORDER FILL STATUS
+        # CHECK SELL ORDER FILL STATUS (If still active)
         if self.current_sell_order:
             try:
                 order = self.exchange.fetch_order(self.current_sell_order, self.symbol)
