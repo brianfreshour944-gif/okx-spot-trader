@@ -172,17 +172,33 @@ class OKXDynamicGridBot:
                     print(f"Execution Engine failed to place Sell Grid Line: {e}")
             else:
                 print(f"📌 Sell Grid Idle: Internal bot inventory has {self.bot_doge:.2f}/{dynamic_sell_amount} DOGE tokens required.")
+def start_loop(self):
+        print("Starting Dynamic Tracking Grid Bot (High-Frequency Loop Active)...")
+        
+        # Track when we last updated the moving average grid
+        last_ma_update_time = 0
+        ma_update_interval = 900  # 15 minutes in seconds
 
-    def start_loop(self):
-        print("Starting Dynamic Tracking Grid Bot...")
         while True:
+            current_time = time.time()
+            
             try:
-                self.update_grid_positions()
+                # OPTION A: Every 15 minutes, fetch candles and adjust for drift
+                if current_time - last_ma_update_time >= ma_update_interval:
+                    print("\n⏰ [15-MIN INTERVAL] Recalculating Moving Average Anchor and checking grid drift...")
+                    self.update_grid_positions()
+                    last_ma_update_time = current_time
+                
+                # OPTION B: Every loop cycle, check if an order filled!
+                else:
+                    self.sync_and_audit_fills()
+                    
             except Exception as e:
                 print(f"Main loop exception triggered: {e}")
             
-            print("Waiting 15 minutes before checking the moving average path...")
-            time.sleep(900)
+            # Sleep for 15 seconds before checking fills again
+            # OKX rate limits easily allow this (CCXT automatic rate limiter handles safety)
+            time.sleep(15)
 
 if __name__ == '__main__':
     bot = OKXDynamicGridBot()
