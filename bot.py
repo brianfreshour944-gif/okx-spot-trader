@@ -6,11 +6,11 @@ import ccxt
 
 class OKXDynamicGridBot:
     def __init__(self):
-        print("--- RUNTIME DIAGNOSTIC CHECK ---")
+        print("--- RUNTIME DIAGNOSTIC CHECK (V2 25-INCREMENT PATCHED) ---")
         print(f"OKX_API_KEY Found: {bool(os.getenv('OKX_API_KEY'))}")
         print(f"OKX_API_SECRET Found: {bool(os.getenv('OKX_API_SECRET'))}")
         print(f"OKX_PASSPHRASE Found: {bool(os.getenv('OKX_PASSPHRASE'))}")
-        print("--------------------------------")
+        print("---------------------------------------------------------")
 
         # SECURE API CONFIGURATION
         self.exchange = ccxt.okx({
@@ -29,8 +29,8 @@ class OKXDynamicGridBot:
         
         # ADJUSTED BUDGET MANAGEMENT FOR OPTIMAL RISK
         self.total_bot_budget = 100.0  
-        self.number_of_grids = 4       # Changed from 2 to 4 grids
-        self.capital_per_grid = self.total_bot_budget / self.number_of_grids  # Now exactly $25.00
+        self.number_of_grids = 4       # 4 grids = $25 increments
+        self.capital_per_grid = self.total_bot_budget / self.number_of_grids  
         
         # Internal tracking ledger balances
         self.bot_cash = 100.0          
@@ -70,8 +70,14 @@ class OKXDynamicGridBot:
                 order = self.exchange.fetch_order(self.current_buy_order, self.symbol)
                 if order['status'] == 'closed':
                     filled_amount = float(order['filled'])
+                    buy_price = float(order['price'])
+                    usd_spent = round(buy_price * filled_amount, 4)
+                    
+                    # FIXED: Deduct cash from tracking ledger when a buy fills
+                    self.bot_cash -= usd_spent
                     self.bot_doge += filled_amount
-                    print(f"💥 [FILL EVENT] Buy Order hit at ${order['price']}! Converted $25 allocation into {filled_amount} DOGE.")
+                    
+                    print(f"💥 [FILL EVENT] Buy Order hit at ${buy_price}! Spent ${usd_spent:.2f} to convert allocation into {filled_amount} DOGE.")
                     self.current_buy_order = None
                 elif order['status'] == 'canceled':
                     self.current_buy_order = None
@@ -87,9 +93,10 @@ class OKXDynamicGridBot:
                     tokens_sold = float(order['filled'])
                     usd_returned = round(sell_price * tokens_sold, 4)
                     
+                    # Add returned cash and remove sold tokens
                     self.bot_cash += usd_returned
                     self.bot_doge -= tokens_sold
-                    print(f"💥 [FILL EVENT] Sell Order hit at ${sell_price}! Returned original $25 capital + profit: Total ${usd_returned:.2f} USDT.")
+                    print(f"💥 [FILL EVENT] Sell Order hit at ${sell_price}! Returned original capital + profit: Total ${usd_returned:.2f} USDT.")
                     self.current_sell_order = None
                 elif order['status'] == 'canceled':
                     self.current_sell_order = None
@@ -137,6 +144,7 @@ class OKXDynamicGridBot:
         # --- DEPLOYMENT WINDOWS ---
         # 1. Buy Side Line Placement
         if not self.current_buy_order:
+            # Recompute cash tracking rules accurately
             allocated_to_buy = self.capital_per_grid if self.current_buy_order else 0.0
             available_cash = self.bot_cash - allocated_to_buy
             
@@ -153,6 +161,7 @@ class OKXDynamicGridBot:
             
         # 2. Sell Side Line Placement
         if not self.current_sell_order:
+            # FIXED: Base the sell amount off the current grid's allocation level ($25)
             dynamic_sell_amount = round(self.capital_per_grid / target_sell_price, 1)
             if self.bot_doge >= dynamic_sell_amount:
                 try:
