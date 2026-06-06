@@ -15,6 +15,22 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s | %(levelname)s | %(
 logger = logging.getLogger(__name__)
 
 # --- DATABASE LOGGING ENGINE ---
+
+def log_error_to_db(bot_name, error_msg):
+    """Logs errors to the bot_errors table."""
+    db_url = os.getenv('DATABASE_URL')
+    if not db_url: return
+    try:
+        with psycopg2.connect(db_url) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "INSERT INTO bot_errors (bot_name, error_message) VALUES (%s, %s)",
+                    (bot_name, str(error_msg))
+                )
+                conn.commit()
+    except Exception as e:
+        logger.error(f"Failed to log error to DB: {e}")
+
 def log_trade_to_db(bot_name, symbol, side, price, quantity, value, order_id):
     db_url = os.getenv('DATABASE_URL')
     if not db_url: return
@@ -27,7 +43,9 @@ def log_trade_to_db(bot_name, symbol, side, price, quantity, value, order_id):
                 """, (bot_name, 'OKX', symbol, side, float(price), float(quantity), float(value), str(order_id)))
                 conn.commit()
     except Exception as e:
-        logger.error(f"Database write error: {e}")
+        error_msg = f"Database write error: {e}"
+        logger.error(error_msg)
+        log_error_to_db(bot_name, error_msg)
 
 def check_status(bot_name):
     """Heartbeat and Kill Switch check for the bot_status table."""
@@ -36,7 +54,6 @@ def check_status(bot_name):
     try:
         with psycopg2.connect(db_url) as conn:
             with conn.cursor() as cur:
-                # 1. Heartbeat
                 cur.execute('''
                     INSERT INTO bot_status (bot_name, last_update, status)
                     VALUES (%s, NOW(), 'RUNNING')
@@ -44,7 +61,6 @@ def check_status(bot_name):
                     DO UPDATE SET last_update = NOW(), status = EXCLUDED.status;
                 ''', (bot_name,))
                 
-                # 2. Kill Switch
                 cur.execute("SELECT status FROM bot_status WHERE bot_name = %s", (bot_name,))
                 row = cur.fetchone()
                 if row and row[0] == 'STOP':
@@ -53,7 +69,9 @@ def check_status(bot_name):
                 conn.commit()
     except Exception as e:
         logger.error(f"Heartbeat failed: {e}")
+        # Note: We don't log heartbeats to bot_errors to avoid infinite error loops
 
+# --- BOT CLASS ---
 class OKXDynamicGridBot:
     def __init__(self):
         self.bot_name = os.getenv('BOT_NAME', 'OKX_Grid_Bot_01')
@@ -68,31 +86,20 @@ class OKXDynamicGridBot:
             'options': {'defaultType': 'spot'}
         })
         self.exchange.set_sandbox_mode(True)
-        
         self.symbol = 'DOGE/USDT'
-        # Perform initial health check
         check_status(self.bot_name)
-
-    def get_moving_average_center(self):
-        try:
-            candles = self.exchange.fetch_ohlcv(self.symbol, timeframe='1h', limit=30)
-            df = pd.DataFrame(candles, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
-            return float(df['close'].rolling(window=20).mean().iloc[-1])
-        except Exception as e:
-            logger.error(f"Error fetching MA: {e}")
-            return None
 
     def start_loop(self):
         logger.info(f"Starting {self.bot_name} loop...")
         while True:
             try:
-                # HEARTBEAT & KILL SWITCH CHECK
                 check_status(self.bot_name)
-                
                 # ... [Grid logic here]
                 
             except Exception as e:
-                logger.error(f"Main loop error: {e}")
+                error_msg = f"Main loop error: {str(e)}"
+                logger.error(error_msg)
+                log_error_to_db(self.bot_name, error_msg)
             time.sleep(15)
 
 if __name__ == '__main__':
