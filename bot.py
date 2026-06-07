@@ -69,52 +69,26 @@ def log_error(msg):
 
 # ====================== GRID BOT ======================
 class GridBot:
-    # ---------- Grid Bot Initialization ----------
-    # ---------- Grid Bot Initialization ----------
     def __init__(self):
+        # Use the standard www.okx.com gateway with simulation header
         self.exchange = ccxt.okx({
             'apiKey': os.getenv('OKX_API_KEY'),
             'secret': os.getenv('OKX_API_SECRET'),
             'password': os.getenv('OKX_PASSPHRASE'),
-            'hostname': 'www.okx.com',  # Use the primary reliable gateway
             'enableRateLimit': True,
             'options': {
                 'defaultType': 'spot',
-                'headers': {'x-simulated-trading': '1'} # This tells OKX you are in Demo Mode
+                # Official OKX demo/simulation header
+                'headers': {'x-simulated-trading': '1'}
             }
         })
-        # Disable sandbox_mode as it conflicts with the simulation header
-        self.exchange.set_sandbox_mode(False) 
+        # No sandbox mode – the header handles simulation
+        # self.exchange.set_sandbox_mode(False) is implied
 
         self.active_orders = {}
         self.running = True
         self.net_pnl = 0.0
         self.peak_equity = None
-
-    # ---------- Main Run ----------
-    async def run(self):
-        # We wrap in try...finally to ensure the connection closes even if the bot crashes
-        try:
-            # Replace load_markets() if it continues to fail
-            await self.exchange.load_markets()
-            logger.info(f"Bot started: {BOT_NAME} on {SYMBOL}")
-
-            status = get_bot_status()
-            if status['status'] != 'RUNNING':
-                logger.info("Bot is STOPPED in database. Exiting.")
-                return
-
-            await self.deploy_initial_grid()
-
-            await asyncio.gather(
-                self.watch_orders(),
-                self.safety_monitor()
-            )
-        finally:
-            logger.info("Stopping bot – cancelling all orders and closing connection...")
-            await self.cancel_all_orders()
-            await self.exchange.close() # CRITICAL: This fixes the "Unclosed client session" error
-            logger.info("Bot exited cleanly.")
 
     # ---------- Order Management ----------
     async def place_order(self, side, price, amount):
@@ -257,24 +231,38 @@ class GridBot:
 
     # ---------- Main Run ----------
     async def run(self):
-        await self.exchange.load_markets()
-        logger.info(f"Bot started: {BOT_NAME} on {SYMBOL}")
+        try:
+            await self.exchange.load_markets()
+            logger.info(f"Bot started: {BOT_NAME} on {SYMBOL}")
 
-        status = get_bot_status()
-        if status['status'] != 'RUNNING':
-            logger.info("Bot is STOPPED in database. Exiting.")
-            return
+            # Quick authentication test (optional but helpful)
+            try:
+                balance = await self.exchange.fetch_balance()
+                logger.info(f"✅ Auth OK! USDT balance: {balance['USDT']['free']}")
+            except Exception as e:
+                logger.error(f"❌ Auth FAILED: {e}")
+                return  # Exit if cannot authenticate
 
-        await self.deploy_initial_grid()
+            status = get_bot_status()
+            if status['status'] != 'RUNNING':
+                logger.info("Bot is STOPPED in database. Exiting.")
+                return
 
-        await asyncio.gather(
-            self.watch_orders(),
-            self.safety_monitor()
-        )
+            await self.deploy_initial_grid()
 
-        logger.info("Stopping bot – cancelling all orders...")
-        await self.cancel_all_orders()
-        logger.info("Bot exited cleanly.")
+            await asyncio.gather(
+                self.watch_orders(),
+                self.safety_monitor()
+            )
+
+        except Exception as e:
+            logger.error(f"Critical bot error: {e}")
+            log_error(f"Critical error: {e}")
+        finally:
+            logger.info("Cleaning up – cancelling orders and closing connection...")
+            await self.cancel_all_orders()
+            await self.exchange.close()  # Prevents unclosed client session
+            logger.info("Bot exited cleanly.")
 
 if __name__ == "__main__":
     bot = GridBot()
