@@ -1,16 +1,9 @@
-# Core async & exchange
-ccxt-pro>=4.0.0          # WebSocket support (ccxt.pro)
-sqlalchemy>=2.0.0        # Database ORM
-psycopg2-binary>=2.9.0   # PostgreSQL driver (or psycopg2 if preferred)
-
-# Dashboard (streamlit)
+ccxt>=4.0.0
+sqlalchemy>=2.0.0
+psycopg2-binary>=2.9.0
 streamlit>=1.28.0
 pandas>=2.0.0
 plotly>=5.17.0
 numpy>=1.24.0
-
-# Alpaca API (if you use Alpaca)
-alpaca-py>=0.10.0        # Alpaca trading client
-
-# Optional but useful
-python-dotenv>=1.0.0     # load .env files
+alpaca-py>=0.10.0
+python-dotenv>=1.0.0
