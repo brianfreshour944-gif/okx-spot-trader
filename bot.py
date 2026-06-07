@@ -70,15 +70,15 @@ def log_error(msg):
 class GridBot:
     def __init__(self):
         # Initializing for US Demo Trading
-        self.exchange = ccxt.okx({
-            'apiKey': os.getenv('OKX_API_KEY'),
-            'secret': os.getenv('OKX_API_SECRET'),
-            'password': os.getenv('OKX_PASSPHRASE'),
-            'hostname': 'app.okx.com',
-            'enableRateLimit': True,
-            'options': {'defaultType': 'spot'}
-        })
-        self.exchange.set_sandbox_mode(True)
+       self.exchange = ccxt.okx({
+    'apiKey': os.getenv('OKX_API_KEY'),
+    'secret': os.getenv('OKX_API_SECRET'),
+    'password': os.getenv('OKX_PASSPHRASE'),
+    'hostname': 'app.okx.com',  # Try 'us.okx.com' if 'app.okx.com' fails
+    'enableRateLimit': True,
+    'options': {'defaultType': 'spot'}
+})
+self.exchange.set_sandbox_mode(True)
         self.active_orders = {}
         self.running = True
         self.net_pnl = 0.0
