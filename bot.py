@@ -89,7 +89,7 @@ class GridBot:
         self.active_orders = {}
         self.running = True
         self.net_pnl = 0.0
-        self.peak_equity = Nonee
+        self.peak_equity = None
 
     # ---------- Order Management ----------
     async def place_order(self, side, price, amount):
