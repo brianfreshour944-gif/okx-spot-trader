@@ -67,27 +67,33 @@ def log_error(msg):
         conn.commit()
 
 # ====================== GRID BOT ======================
+# ====================== GRID BOT ======================
 class GridBot:
     def __init__(self):
+        # Everything here is now correctly inside the __init__ method
         self.exchange = ccxt.okx({
             'apiKey': os.getenv('OKX_API_KEY'),
             'secret': os.getenv('OKX_API_SECRET'),
             'password': os.getenv('OKX_PASSPHRASE'),
             'enableRateLimit': True,
-            # Force the connection to the app domain
             'hostname': 'app.okx.com',
-            # Ensure the simulation header is passed
-            'options': {'defaultType': 'spot', 'x-simulated-trading': '1'}
+            'options': {
+                'defaultType': 'spot',
+                'x-simulated-trading': '1'
+            }
         })
+        
         # Explicitly enable sandbox mode
         self.exchange.set_sandbox_mode(True)
-        # ... rest of your init
         self.exchange.headers = {'x-simulated-trading': '1'}
         
         self.active_orders = {}
         self.running = True
         self.net_pnl = 0.0
         self.peak_equity = None
+
+    # ---------- Order Management ----------
+    # ... (Rest of your methods remain the same)
 
     # ---------- Order Management ----------
     async def place_order(self, side, price, amount):
