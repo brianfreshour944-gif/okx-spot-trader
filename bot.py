@@ -78,16 +78,16 @@ class GridBot:
 
         # Explicit sandbox hostname – no set_sandbox_mode
         self.exchange = ccxt.okx({
-            'apiKey': api_key,
-            'secret': api_secret,
-            'password': api_pass,
-            'hostname': 'sandbox.okx.com',
-            'enableRateLimit': True,
-            'options': {
-                'defaultType': 'spot',
-                'headers': {'x-simulated-trading': '1'}
-            }
-        })
+    'apiKey': os.getenv('OKX_API_KEY'),
+    'secret': os.getenv('OKX_API_SECRET'),
+    'password': os.getenv('OKX_PASSPHRASE'),
+    'enableRateLimit': True,
+    'options': {
+        'defaultType': 'spot',
+        'headers': {'x-simulated-trading': '1'}
+    }
+})
+# No set_sandbox_mode
 
         # Test authentication synchronously
         try:
