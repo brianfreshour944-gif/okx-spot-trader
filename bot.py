@@ -69,16 +69,19 @@ def log_error(msg):
 # ====================== GRID BOT ======================
 class GridBot:
     def __init__(self):
-        # Initialized to match your working bot's pattern
         self.exchange = ccxt.okx({
             'apiKey': os.getenv('OKX_API_KEY'),
             'secret': os.getenv('OKX_API_SECRET'),
             'password': os.getenv('OKX_PASSPHRASE'),
             'enableRateLimit': True,
-            'options': {'defaultType': 'spot'}
+            # Force the connection to the app domain
+            'hostname': 'app.okx.com',
+            # Ensure the simulation header is passed
+            'options': {'defaultType': 'spot', 'x-simulated-trading': '1'}
         })
-        
+        # Explicitly enable sandbox mode
         self.exchange.set_sandbox_mode(True)
+        # ... rest of your init
         self.exchange.headers = {'x-simulated-trading': '1'}
         
         self.active_orders = {}
