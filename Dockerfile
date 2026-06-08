@@ -1,20 +1,17 @@
-# Use a lightweight official Python runtime base image
+# Use the official lightweight Python image
 FROM python:3.11-slim
 
-# Turn off Python log buffering so logs stream directly to the Coolify live terminal console instantly
-ENV PYTHONUNBUFFERED=1
-
-# Establish our working folder directory inside the container
+# Set working directory
 WORKDIR /app
 
-# Copy dependency requirements first to utilize Docker build caching
+# Copy requirements first (better layer caching)
 COPY requirements.txt .
 
-# Install necessary python modules
+# Install dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy over the core bot application logic file
+# Copy the rest of the application
 COPY bot.py .
 
-# Fire up the engine execution thread on startup
+# Command to run the bot
 CMD ["python", "bot.py"]
