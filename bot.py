@@ -11,7 +11,12 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s | %(levelname)s | %(
 logger = logging.getLogger("ReactiveGridBot")
 
 # ====================== CONFIG ======================
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///grid_bot.db")
+DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
+if DATABASE_URL and "psycopg2" in DATABASE_URL:
+    DATABASE_URL = DATABASE_URL.replace("postgresql+psycopg2://", "postgresql://")
+if not DATABASE_URL:
+    DATABASE_URL = "sqlite:///grid_bot.db"
+
 engine = create_engine(DATABASE_URL, echo=False, pool_pre_ping=True)
 
 BOT_NAME = "okx_grid_bot"
@@ -22,10 +27,9 @@ BASE_ORDER_SIZE_USDT = 80
 MIN_PRICE = 0.07
 MAX_PRICE = 0.14
 
-# Reactivity Settings
-RECENTER_THRESHOLD_PCT = 0.009      # 0.9% move = recenter
-CHECK_INTERVAL = 60                 # seconds
-MIN_REDEPLOY_COOLDOWN = 300         # 5 minutes
+RECENTER_THRESHOLD_PCT = 0.009
+CHECK_INTERVAL = 60
+MIN_REDEPLOY_COOLDOWN = 300
 
 STOP_LOSS_AMOUNT = -80
 TAKE_PROFIT_AMOUNT = 180
@@ -36,6 +40,7 @@ MAX_DRAWDOWN_PCT = 12
 def init_db():
     try:
         with engine.connect() as conn:
+            # bot_status
             conn.execute(text("""
                 CREATE TABLE IF NOT EXISTS bot_status (
                     bot_name TEXT PRIMARY KEY,
@@ -44,27 +49,42 @@ def init_db():
                     daily_loss_limit NUMERIC DEFAULT 100
                 );
             """))
+            
+            # trades - PostgreSQL compatible
             conn.execute(text("""
                 CREATE TABLE IF NOT EXISTS trades (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    bot_name TEXT, exchange TEXT, symbol TEXT, side TEXT,
-                    price NUMERIC, quantity NUMERIC, value NUMERIC, fee NUMERIC,
-                    order_id TEXT, timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    id SERIAL PRIMARY KEY,
+                    bot_name TEXT,
+                    exchange TEXT,
+                    symbol TEXT,
+                    side TEXT,
+                    price NUMERIC,
+                    quantity NUMERIC,
+                    value NUMERIC,
+                    fee NUMERIC,
+                    order_id TEXT,
+                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 );
             """))
+            
+            # bot_errors
             conn.execute(text("""
                 CREATE TABLE IF NOT EXISTS bot_errors (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    bot_name TEXT, error_message TEXT, timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    id SERIAL PRIMARY KEY,
+                    bot_name TEXT,
+                    error_message TEXT,
+                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 );
             """))
+            
             conn.execute(text("""
                 INSERT INTO bot_status (bot_name, status) 
                 VALUES (:name, 'RUNNING')
                 ON CONFLICT (bot_name) DO NOTHING;
             """), {"name": BOT_NAME})
+            
             conn.commit()
-        logger.info("✅ Database initialized")
+        logger.info("✅ Database initialized successfully")
     except Exception as e:
         logger.error(f"DB init failed: {e}")
         raise
@@ -223,7 +243,7 @@ class ReactiveGridBot:
                 await asyncio.sleep(5)
 
     async def place_opposite_order(self, filled_side, price, amount):
-        multiplier = (1 + 0.012) if filled_side == 'buy' else (1 - 0.012)  # slight adjustment
+        multiplier = (1 + 0.012) if filled_side == 'buy' else (1 - 0.012)
         new_price = price * multiplier
         if MIN_PRICE <= new_price <= MAX_PRICE:
             new_side = 'sell' if filled_side == 'buy' else 'buy'
@@ -238,14 +258,8 @@ class ReactiveGridBot:
                     logger.info("Bot stopped via dashboard")
                     self.running = False
                     break
-
-                if status['daily_loss'] <= -MAX_DAILY_LOSS_USDT:
+                if status.get('daily_loss', 0) <= -MAX_DAILY_LOSS_USDT:
                     logger.warning("Daily loss limit reached!")
-                    self.running = False
-                    break
-
-                if self.net_pnl <= STOP_LOSS_AMOUNT or self.net_pnl >= TAKE_PROFIT_AMOUNT:
-                    logger.info("Stop-loss or Take-profit triggered")
                     self.running = False
                     break
             except Exception as e:
@@ -262,7 +276,7 @@ class ReactiveGridBot:
                     abs(current - self.last_grid_center) / self.last_grid_center > RECENTER_THRESHOLD_PCT) and \
                    (now - self.last_redeploy_time > MIN_REDEPLOY_COOLDOWN):
 
-                    logger.info(f"📈 Price moved significantly → Recentering grid")
+                    logger.info(f"📈 Price moved → Recentering grid at {current:.6f}")
                     await self.deploy_grid(current)
 
                 await asyncio.sleep(CHECK_INTERVAL)
