@@ -1,3 +1,4 @@
+
 import asyncio
 import ccxt
 import os
@@ -11,7 +12,7 @@ logger = logging.getLogger("TakerBot")
 
 # ====================== CONFIG ======================
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///taker_bot.db")
-engine = create_engine(DATABASE_URL)
+engine = create_engine(DATABASE_URL, echo=False)
 
 BOT_NAME = "okx_taker_bot"
 SYMBOL = "DOGE/USDT"
@@ -21,27 +22,36 @@ RSI_PERIOD = 14
 RSI_OVERBOUGHT = 70
 RSI_OVERSOLD = 35
 
-STOP_LOSS_PCT = 2.5
-TAKE_PROFIT_PCT = 5.0
-
 # ====================== DB ======================
 def init_db():
-    with engine.connect() as conn:
-        conn.execute(text("""
-            CREATE TABLE IF NOT EXISTS bot_status (
-                bot_name TEXT PRIMARY KEY,
-                status TEXT DEFAULT 'STOP'
-            );
-        """))
-        conn.execute(text("INSERT OR IGNORE INTO bot_status (bot_name, status) VALUES (?, 'RUNNING')"), (BOT_NAME,))
-        conn.commit()
+    try:
+        with engine.connect() as conn:
+            # Create table
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS bot_status (
+                    bot_name TEXT PRIMARY KEY,
+                    status TEXT DEFAULT 'STOP'
+                );
+            """))
+            
+            # Insert or update status (compatible with SQLite + PostgreSQL)
+            conn.execute(text("""
+                INSERT INTO bot_status (bot_name, status)
+                VALUES (:name, 'RUNNING')
+                ON CONFLICT (bot_name) DO UPDATE SET status = 'RUNNING'
+            """), {"name": BOT_NAME})
+            
+            conn.commit()
+        logger.info("✅ Database initialized")
+    except Exception as e:
+        logger.error(f"Database init failed: {e}")
 
 # ====================== BOT ======================
 class TakerBot:
     def __init__(self):
         logger.info("Initializing Taker Bot...")
 
-        # === WORKING OKX CONFIG FROM YOUR OTHER BOT ===
+        # WORKING CONFIG FROM YOUR OTHER BOT
         self.exchange = ccxt.okx({
             'apiKey': os.getenv('OKX_API_KEY'),
             'secret': os.getenv('OKX_API_SECRET'),
@@ -55,8 +65,12 @@ class TakerBot:
         })
         self.exchange.set_sandbox_mode(True)
 
-        self.exchange.load_markets()
-        logger.info("✅ OKX Connection Successful (Sandbox)")
+        try:
+            self.exchange.load_markets()
+            logger.info("✅ OKX Connection Successful (Sandbox)")
+        except Exception as e:
+            logger.error(f"OKX Connection Failed: {e}")
+            raise
 
         self.position = None
         self.running = True
@@ -109,21 +123,26 @@ class TakerBot:
                     price = ticker['last']
                     amount = POSITION_SIZE_USDT / price
 
-                    logger.info(f"Signal: {signal} | Price: {price} | Amount: {amount:.4f}")
+                    logger.info(f"🔍 Signal: {signal} at {price}")
 
                     order = await asyncio.to_thread(
                         self.exchange.create_order, SYMBOL, 'market', signal.lower(), amount
                     )
                     self.position = {'side': signal.lower(), 'entry': price}
-                    logger.info(f"✅ Market {signal} executed")
+                    logger.info(f"✅ Market {signal} executed | Order ID: {order.get('id')}")
 
                 await asyncio.sleep(15)
 
             except Exception as e:
-                logger.error(f"Error: {e}")
+                logger.error(f"Main loop error: {e}")
                 await asyncio.sleep(30)
 
 
 if __name__ == "__main__":
-    bot = TakerBot()
-    asyncio.run(bot.run())
+    try:
+        bot = TakerBot()
+        asyncio.run(bot.run())
+    except KeyboardInterrupt:
+        logger.info("Bot stopped by user")
+    except Exception as e:
+        logger.error(f"Fatal error: {e}")
