@@ -13,7 +13,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s | %(levelname)s | %(
 logger = logging.getLogger("ReactiveGridBot.Main")
 
 # ====================== PARAMETER DEFINITIONS ======================
-BOT_NAME               = "okx_grid_bot"
+BOT_NAME               = "Static-Repo-okx-bot"
 SYMBOL                 = "DOGE/USDT"
 GRID_LEVELS            = 6
 BASE_ORDER_SIZE_USDT   = 80
